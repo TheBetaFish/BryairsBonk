@@ -349,37 +349,59 @@ class BonkBot {
 	}
 
 	async getAddressFromUrl(url) {
-		const regex = /\/(\d{6})([a-zA-Z0-9]{5})?$/;
-		const match = url.match(regex);
+		// Accept a Bonk.io share URL with a six-digit room ID and optional
+		// five-character bypass suffix. Ignore query strings and URL fragments.
+		let parsedUrl;
+		try {
+			parsedUrl = new URL(url);
+		} catch {
+			throw new Error('Invalid Bonk.io room URL.');
+		}
 
+		if (!['bonk.io', 'www.bonk.io'].includes(parsedUrl.hostname.toLowerCase())) {
+			throw new Error('Room URL must be from bonk.io.');
+		}
+
+		const match = parsedUrl.pathname.match(/^\/(\d{6})([a-zA-Z0-9]{5})?\/?$/);
 		if (!match) {
-			return null;
+			throw new Error('Invalid Bonk.io share link. Expected a six-digit room ID, with an optional five-character bypass.');
 		}
 
 		const id = match[1];
 		const bypass = match[2] || '';
-
 		const data = new URLSearchParams();
 		data.append('joinID', id);
 
 		try {
 			const response = await axios.post(API.AUTOJOIN, data.toString(), {
-				headers: {
-					'Content-Type': 'application/x-www-form-urlencoded',
-				},
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 				httpsAgent: httpsAgent,
 			});
 
 			const result = response.data;
-
-			if (result.r == 'success') {
-				result.bypass = bypass;
+			if (!result || typeof result !== 'object' || result.r !== 'success') {
+				const reason = result && (result.error || result.message || result.r);
+				throw new Error('Bonk.io could not resolve that room link' + (reason ? ': ' + String(reason) : '. The room may be closed or the link may have expired.'));
 			}
 
-			return result;
+			// Bonk.io's autojoin endpoint uses "passbypass"; setAddress()
+			// expects the normalized "bypass" property.
+			const normalized = {
+				...result,
+				address: result.address,
+				roomname: result.roomname || result.roomName || result.name,
+				server: result.server,
+				bypass: bypass || result.passbypass || result.bypass || '',
+			};
+
+			if (!normalized.address || !normalized.roomname || !normalized.server) {
+				throw new Error('Bonk.io returned an incomplete room lookup response (missing address, room name, or server).');
+			}
+
+			return normalized;
 		} catch (error) {
 			console.error('Error getting join link:', error);
-			throw error; // Re-throw to allow caller to handle the error
+			throw error;
 		}
 	}
 
