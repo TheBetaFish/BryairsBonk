@@ -1,43 +1,24 @@
 {
-  "name": "bonkbot",
+  "name": "bryairsbonk",
   "version": "4.0.4",
-  "description": "A bonk.io botting library",
+  "description": "Standalone Firefox room client for Bonk.io using the BonkBot library",
   "main": "src/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "download-cert": "node scripts/download-cert.js",
     "preinstall": "node scripts/download-cert.js || true",
     "simple-bot": "node examples/simple-bot.js",
-    "host-bot": "node examples/host-bot.js"
+    "host-bot": "node examples/host-bot.js",
+    "web-client": "node web-server.js"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/PixelMelt/BonkBot.git"
-  },
-  "author": "PixelMelt",
+  "repository": {"type":"git","url":"git+https://github.com/TheBetaFish/BryairsBonk.git"},
+  "author": "TheBetaFish",
   "license": "GPL-3.0",
-  "bugs": {
-    "url": "https://github.com/PixelMelt/BonkBot/issues"
-  },
-  "homepage": "https://github.com/PixelMelt/BonkBot#readme",
-  "dependencies": {
-    "axios": "^1.13.5",
-    "socket.io-client": "^2.4.0"
-  },
-  "engines": {
-    "node": ">=12.0.0"
-  },
-  "keywords": [
-    "bonk.io",
-    "bot",
-    "game",
-    "automation"
-  ],
+  "bugs": {"url":"https://github.com/PixelMelt/BonkBot/issues"},
+  "homepage": "https://github.com/TheBetaFish/BryairsBonk",
+  "dependencies": {"axios":"^1.13.5","socket.io-client":"^2.4.0"},
+  "engines": {"node":">=12.0.0"},
   "private": true,
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  }
+  "devDependencies": {"@types/bun":"latest"},
+  "peerDependencies": {"typescript":"^5"}
 }
