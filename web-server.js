@@ -2,7 +2,8 @@
 "use strict";
 const http=require("http"),fs=require("fs"),path=require("path");
 const {createBot,LOG_LEVELS}=require("./src");
-const HOST="127.0.0.1",PORT=Number(process.env.PORT||8787);
+const HOST=process.env.HOST||"127.0.0.1",PORT=Number(process.env.PORT||8787);
+const ALLOWED_ORIGINS=new Set((process.env.ALLOWED_ORIGINS||"https://thebetafish.github.io,http://127.0.0.1:8787,http://localhost:8787").split(",").map(x=>x.trim()).filter(Boolean));
 let bot=null,connecting=false,connected=false,joined=false,currentRoom="",lastError="";
 const clients=new Set(),history=[];const MAX_HISTORY=250;
 function safePlayer(p){if(!p||typeof p!=="object")return null;return{id:p.id??p.peerID??null,username:String(p.username||p.name||"Player").slice(0,64),team:p.team??null,ready:p.ready??null};}
@@ -55,12 +56,16 @@ async function api(req,res,url){
  return send(res,404,{error:"Not found"});
 }
 const server=http.createServer(async(req,res)=>{
+ const origin=req.headers.origin;
+ if(origin&&ALLOWED_ORIGINS.has(origin)){res.setHeader("Access-Control-Allow-Origin",origin);res.setHeader("Vary","Origin");res.setHeader("Access-Control-Allow-Methods","GET, POST, OPTIONS");res.setHeader("Access-Control-Allow-Headers","Content-Type");}
+ if(req.method==="OPTIONS"){res.writeHead(origin&&ALLOWED_ORIGINS.has(origin)?204:403);return res.end();}
+ if(origin&&!ALLOWED_ORIGINS.has(origin)){res.writeHead(403,{"Content-Type":"application/json; charset=utf-8"});return res.end(JSON.stringify({error:"Origin is not allowed. Configure ALLOWED_ORIGINS for your client site."}));}
  const url=new URL(req.url,"http://"+HOST+":"+PORT);
  if(req.method==="GET"&&url.pathname==="/")return send(res,200,fs.readFileSync(path.join(__dirname,"client.html"),"utf8"),"text/html; charset=utf-8");
  if(req.method==="GET"&&url.pathname==="/app.js")return send(res,200,fs.readFileSync(path.join(__dirname,"public","app.js"),"utf8"),"text/javascript; charset=utf-8");
  if(req.method==="GET"&&url.pathname==="/api/events"){res.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8","Cache-Control":"no-cache, no-transform","Connection":"keep-alive","X-Accel-Buffering":"no"});res.write("retry: 2000\n\n");clients.add(res);for(const item of history)res.write("data: "+JSON.stringify(item)+"\n\n");req.on("close",()=>clients.delete(res));return}
  if(url.pathname.startsWith("/api/"))return api(req,res,url);return send(res,404,{error:"Not found"});
 });
-server.listen(PORT,HOST,()=>{console.log("Bryair's Bonk client: http://"+HOST+":"+PORT);console.log("Bound to localhost only.")});
+server.listen(PORT,HOST,()=>{console.log("Bryair's Bonk API listening on "+HOST+":"+PORT);});
 function shutdown(){try{if(bot){bot.leaveGame();bot.disconnect()}}catch{}for(const res of clients){try{res.end()}catch{}}server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),1500).unref()}
 process.on("SIGINT",shutdown);process.on("SIGTERM",shutdown);
