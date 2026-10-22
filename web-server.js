@@ -41,7 +41,7 @@ async function api(req,res,url){
    await instance.connect();if(!instance.connected)throw Error("Game server connection did not become active.");
    await instance.joinRoom(password?{password}:{});
    connecting=false;broadcast("log",{level:"success",message:"Join request sent; waiting for room state…"});broadcast("state",state());return send(res,200,{ok:true,state:state()});
-  }catch(e){lastError=msg(e);connecting=false;connected=Boolean(bot&&bot.connected);broadcast("log",{level:"error",message:"Join failed: "+lastError});try{if(bot)bot.leaveGame()}catch{}bot=null;connected=false;joined=false;currentRoom="";broadcast("state",state());return send(res,502,{error:lastError,state:state()})}
+  }catch(e){lastError=msg(e);connecting=false;connected=Boolean(bot&&bot.connected);broadcast("log",{level:"error",message:"Join failed: "+lastError});try{if(bot){await bot.leaveGame();bot.disconnect()}}catch{}bot=null;connected=false;joined=false;currentRoom="";broadcast("state",state());return send(res,502,{error:lastError,state:state()})}
  }
  if(url.pathname==="/api/chat"){
   if(!bot||!connected||!joined)return send(res,409,{error:"Join a room before sending chat."});
@@ -49,7 +49,7 @@ async function api(req,res,url){
   try{bot.chat(message);broadcast("log",{level:"info",message:"Chat message submitted."});return send(res,200,{ok:true})}catch(e){return send(res,502,{error:msg(e)})}
  }
  if(url.pathname==="/api/leave"){
-  try{if(bot)bot.leaveGame()}catch(e){broadcast("log",{level:"warn",message:"Leave: "+msg(e)})}
+  try{if(bot){await bot.leaveGame();bot.disconnect()}}catch(e){broadcast("log",{level:"warn",message:"Leave: "+msg(e)})}
   bot=null;connecting=false;connected=false;joined=false;currentRoom="";broadcast("log",{level:"info",message:"Client session closed."});broadcast("state",state());return send(res,200,{ok:true,state:state()})
  }
  return send(res,404,{error:"Not found"});
@@ -62,5 +62,5 @@ const server=http.createServer(async(req,res)=>{
  if(url.pathname.startsWith("/api/"))return api(req,res,url);return send(res,404,{error:"Not found"});
 });
 server.listen(PORT,HOST,()=>{console.log("Bryair's Bonk client: http://"+HOST+":"+PORT);console.log("Bound to localhost only.")});
-function shutdown(){try{if(bot)bot.leaveGame()}catch{}for(const res of clients){try{res.end()}catch{}}server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),1500).unref()}
+function shutdown(){try{if(bot){bot.leaveGame();bot.disconnect()}}catch{}for(const res of clients){try{res.end()}catch{}}server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),1500).unref()}
 process.on("SIGINT",shutdown);process.on("SIGTERM",shutdown);
