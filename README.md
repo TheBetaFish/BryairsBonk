@@ -260,3 +260,21 @@ Contributions are always welcome! If you find a bug or have a feature request, p
 ## License
 
 BonkBot is open-source software licensed under the [GPL-3.0 License](https://www.gnu.org/licenses/gpl-3.0.en.html).
+
+
+## Standalone Firefox client
+
+This repository includes a local browser interface for room lookup, joining, player events, and room chat. It is a separate client UI; it does not embed the Bonk.io website. It currently does **not** render the arena or implement player movement.
+
+Requirements: Node.js 18 or 16 are the versions previously reported as tested by the upstream project.
+
+Run from the repository root:
+
+```bash
+npm install
+npm run web-client
+```
+
+Then open **http://127.0.0.1:8787** in Firefox. The local API server binds to loopback only. Keep it local and do not port-forward it or expose it to the public internet.
+
+Enter a room name or a valid Bonk.io room share URL, choose a guest display name, and click **Connect & join room**. Room passwords are sent only to the local backend for that join request and are not saved by the UI. Network and protocol compatibility can change as Bonk.io changes.
