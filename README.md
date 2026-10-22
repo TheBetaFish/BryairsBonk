@@ -278,3 +278,18 @@ npm run web-client
 Then open **http://127.0.0.1:8787** in Firefox. The local API server binds to loopback only. Keep it local and do not port-forward it or expose it to the public internet.
 
 Enter a room name or a valid Bonk.io room share URL, choose a guest display name, and click **Connect & join room**. Room passwords are sent only to the local backend for that join request and are not saved by the UI. Network and protocol compatibility can change as Bonk.io changes.
+
+
+## GitHub Pages + hosted room API
+
+GitHub Pages only serves static files; it cannot run the Node.js BonkBot backend. The browser UI now talks to a separately hosted API.
+
+1. Open [Render Blueprints](https://dashboard.render.com/blueprints) and create a Blueprint from this repository.
+2. Let Render read the repository's `render.yaml` and create the `bryairsbonk-api` web service.
+3. Wait for the first deployment to finish, then copy the service's HTTPS URL from the Render dashboard.
+4. Open [the GitHub Pages client](https://thebetafish.github.io/BryairsBonk/), paste that URL into **Hosted API URL**, and click **Connect backend**.
+5. Enter a Bonk.io room share URL or room name, choose a guest display name, and click **Connect & join room**.
+
+The Render service uses `ALLOWED_ORIGINS` to allow the GitHub Pages origin. If you use a custom domain, update that environment variable to include the exact origin. Render's free service may sleep when idle, so the first request can take a little while to wake it.
+
+**Limitations:** this client currently provides room connection, player/event telemetry, and chat; it does not render the Bonk.io arena or implement player movement. Connection compatibility depends on Bonk.io's current protocol. The hosted API is publicly reachable, so keep it dedicated to this project and monitor its logs/usage.
