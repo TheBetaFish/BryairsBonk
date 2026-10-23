@@ -397,9 +397,10 @@ class BonkBot {
 				}
 			}
 
-			// The autojoin endpoint can return {r:"failed"} without a useful
-			// explanation. Fall back to the room-address endpoint for a valid
-			// six-digit share ID rather than failing immediately.
+			// Autojoin can return {r:"failed"} without explaining why. Try the
+			// room-address endpoint as a fallback, but preserve its failure reason
+			// so the browser console can distinguish an invalid room from an API issue.
+			let fallbackProblem = 'room-address endpoint returned no usable address/server';
 			try {
 				const addressInfo = await this.getRoomAddress(id);
 				if (addressInfo && addressInfo.address && addressInfo.server) {
@@ -409,12 +410,19 @@ class BonkBot {
 						bypass: bypass || addressInfo.passbypass || addressInfo.bypass || '',
 					};
 				}
+				fallbackProblem = 'room-address response missing required fields (' +
+					Object.keys(addressInfo || {}).join(', ') + ')';
 			} catch (fallbackError) {
-				logger.warn('Fallback room-address lookup failed', fallbackError.message);
+				fallbackProblem = fallbackError.message || String(fallbackError);
+				logger.warn('Fallback room-address lookup failed', fallbackProblem);
 			}
 
 			const reason = result && (result.error || result.message || result.r);
-			throw new Error('Bonk.io could not resolve that room link' + (reason ? ': ' + String(reason) : '. The room may be closed or the link may have expired.'));
+			throw new Error(
+				'Bonk.io room lookup failed (autojoin: ' + String(reason || 'unknown') +
+				'; fallback: ' + fallbackProblem +
+				'). Check that the share link is current and the room is still available.'
+			);
 		} catch (error) {
 			console.error('Error getting join link:', error);
 			throw error;
