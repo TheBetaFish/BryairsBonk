@@ -121,6 +121,7 @@ class BonkBot {
 			balance: false,
 			inputs: false,
 			framecount: false,
+			framecountUpdatedAt: 0,
 			stateID: false,
 			admin: false,
 			random: false,
@@ -636,6 +637,10 @@ class BonkBot {
 				this.room.inGame = true;
 				this.room.roundStartTime = packet.timestamp;
 				this.room.state = packet.state;
+				if (Number.isFinite(Number(packet.state.fc))) {
+					this.room.framecount = Number(packet.state.fc);
+					this.room.framecountUpdatedAt = Date.now();
+				}
 
 				this.room.map = packet.state.map;
 				this.room.gt = packet.state.gt;
@@ -773,7 +778,8 @@ class BonkBot {
 				this.room.quickplay = packet.q;
 				this.room.teamsLocked = packet.tl;
 				this.room.teams = packet.tea;
-				this.room.framecount = packet.fc;
+				this.room.framecount = Number(packet.fc) || 0;
+				this.room.framecountUpdatedAt = Date.now();
 				this.room.stateID = packet.stateID;
 				this.room.admin = packet.admin;
 				this.room.map = packet.gs ? packet.gs.map : null;
@@ -960,6 +966,18 @@ class BonkBot {
 				this.players.delete(packet.id);
 
 				this.events.emit('PLAYER_KICK', kickedPlayer);
+				break;
+
+			case 'STATE':
+				// Keep the authoritative room frame in sync so remote inputs are not
+				// stamped with a browser-local frame counter that the game server may reject.
+				if (Number.isFinite(Number(packet.framecount))) {
+					this.room.framecount = Number(packet.framecount);
+					this.room.framecountUpdatedAt = Date.now();
+				}
+				if (packet.stateID !== undefined) this.room.stateID = packet.stateID;
+				if (packet.state !== undefined) this.room.state = packet.state;
+				if (packet.inputs !== undefined) this.room.inputs = packet.inputs;
 				break;
 
 			case 'PLAYER_INPUT':
