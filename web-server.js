@@ -58,7 +58,7 @@ async function api(req,res,url){
   if(!bot||!connected||!joined||!bot.room?.inGame)return send(res,409,{error:"Join a room and wait for a match before sending game input."});
   const input=Number(body.input),frame=Number(body.frame),sequence=Number(body.sequence);
   if(!Number.isSafeInteger(input)||input<0||input>65535||!Number.isSafeInteger(frame)||frame<0||!Number.isSafeInteger(sequence)||sequence<0)return send(res,400,{error:"input must be 0–65535 and frame/sequence must be non-negative integers."});
-  try{const base=Number.isFinite(Number(bot.room.framecount))?Number(bot.room.framecount):frame;const updatedAt=Number(bot.room.framecountUpdatedAt)||Date.now();const authoritativeFrame=Math.max(0,base+Math.floor(Math.max(0,Date.now()-updatedAt)*60/1000));await bot.sendInput({input,frame:authoritativeFrame,sequence});return send(res,200,{ok:true,frame:authoritativeFrame})}catch(e){return send(res,502,{error:msg(e)})}
+  const receivedAt=Date.now();try{const base=Number.isFinite(Number(bot.room.framecount))?Number(bot.room.framecount):frame;const updatedAt=Number(bot.room.framecountUpdatedAt)||receivedAt;const authoritativeFrame=Math.max(0,base+Math.floor(Math.max(0,receivedAt-updatedAt)*60/1000));bot.sendInput({input,frame:authoritativeFrame,sequence}).catch(e=>broadcast("log",{level:"error",message:"Input forward failed: "+msg(e)}));return send(res,200,{ok:true,frame:authoritativeFrame,serverFrame:base,frameAgeMs:Math.max(0,receivedAt-updatedAt),forwardedAt:receivedAt})}catch(e){return send(res,502,{error:msg(e)})}
  }
  if(url.pathname==="/api/chat"){
   if(!bot||!connected||!joined)return send(res,409,{error:"Join a room before sending chat."});
