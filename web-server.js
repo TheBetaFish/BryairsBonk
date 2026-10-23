@@ -8,10 +8,10 @@ let bot=null,connecting=false,connected=false,joined=false,currentRoom="",lastEr
 const clients=new Set(),history=[];const MAX_HISTORY=250;
 function safePlayer(p){if(!p||typeof p!=="object")return null;return{id:p.id??p.peerID??null,username:String(p.username||p.userName||p.name||"Player").slice(0,64),team:p.team??null,teamName:p.teamName??null,guest:Boolean(p.guest),host:Boolean(p.host),ready:p.ready??null,level:Number.isFinite(Number(p.level))?Number(p.level):null,ping:Number.isFinite(Number(p.ping))?Number(p.ping):null};}
 function getPlayers(){try{return bot?bot.getAllPlayers().map(safePlayer).filter(Boolean):[]}catch{return[]}}
-function state(){return{backend:true,connecting,connected,joined,room:currentRoom,players:getPlayers(),lastError}}
+function state(){return{backend:true,connecting,connected,joined,room:currentRoom,players:getPlayers(),lastError,inGame:Boolean(bot&&bot.room&&bot.room.inGame),countdown:bot&&bot.room?bot.room.countdown:false,teamsLocked:Boolean(bot&&bot.room&&bot.room.teamsLocked),mode:bot&&bot.room?bot.room.mode||"": "",engine:bot&&bot.room?bot.room.engine||"":""}}
 function broadcast(type,data={}){const item={type,data,time:new Date().toISOString()};history.push(item);if(history.length>MAX_HISTORY)history.shift();const line="data: "+JSON.stringify(item)+"\n\n";for(const res of clients){try{res.write(line)}catch{clients.delete(res)}}}
 function attachEvents(instance){
- for(const name of ["ready","connect","disconnect","JOIN","PLAYER_JOIN","PLAYER_LEAVE","CHAT_MESSAGE","TEAM_CHANGE","HOST_TRANSFER","READY_CHANGE","GAME_START","GAME_END","COUNTDOWN","MAP_SWITCH","GAMEMODE_CHANGE","ROOM_SHARE_LINK"]){
+ for(const name of ["ready","connect","disconnect","JOIN","PLAYER_JOIN","PLAYER_LEAVE","CHAT_MESSAGE","TEAM_CHANGE","HOST_TRANSFER","READY_CHANGE","GAME_START","GAME_END","COUNTDOWN","ABORT_COUNTDOWN","MAP_SWITCH","GAMEMODE_CHANGE","ROOM_SHARE_LINK","TEAMLOCK_TOGGLE"]){
   instance.events.on(name,data=>{
    if(name==="connect")connected=true;if(name==="disconnect"){connected=false;joined=false}if(name==="JOIN")joined=true;
    if(name==="CHAT_MESSAGE"&&data)broadcast("chat",{username:String(data.player?.username||"Player").slice(0,64),message:String(data.message||"").slice(0,500)});
@@ -43,6 +43,22 @@ async function api(req,res,url){
    await instance.joinRoom(password?{password}:{});
    connecting=false;broadcast("log",{level:"success",message:"Join request sent; waiting for room state…"});broadcast("state",state());return send(res,200,{ok:true,state:state()});
   }catch(e){lastError=msg(e);connecting=false;connected=Boolean(bot&&bot.connected);broadcast("log",{level:"error",message:"Join failed: "+lastError});try{if(bot){await bot.leaveGame();bot.disconnect()}}catch{}bot=null;connected=false;joined=false;currentRoom="";broadcast("state",state());return send(res,502,{error:lastError,state:state()})}
+ }
+ if(url.pathname==="/api/ready"){
+  if(!bot||!connected||!joined)return send(res,409,{error:"Join a room before changing readiness."});
+  if(typeof body.ready!=="boolean")return send(res,400,{error:"ready must be true or false."});
+  try{await bot.ready(body.ready);broadcast("log",{level:"info",message:"Ready status sent."});return send(res,200,{ok:true,state:state()})}catch(e){return send(res,502,{error:msg(e)})}
+ }
+ if(url.pathname==="/api/team"){
+  if(!bot||!connected||!joined)return send(res,409,{error:"Join a room before changing teams."});
+  const team=Number(body.team);if(!Number.isInteger(team)||team<0||team>5)return send(res,400,{error:"Team must be between 0 and 5."});
+  try{await bot.joinTeam(team);broadcast("log",{level:"info",message:"Team change request sent."});return send(res,200,{ok:true,state:state()})}catch(e){return send(res,502,{error:msg(e)})}
+ }
+ if(url.pathname==="/api/input"){
+  if(!bot||!connected||!joined||!bot.room?.inGame)return send(res,409,{error:"Join a room and wait for a match before sending game input."});
+  const input=Number(body.input),frame=Number(body.frame),sequence=Number(body.sequence);
+  if(!Number.isSafeInteger(input)||input<0||input>65535||!Number.isSafeInteger(frame)||frame<0||!Number.isSafeInteger(sequence)||sequence<0)return send(res,400,{error:"input must be 0–65535 and frame/sequence must be non-negative integers."});
+  try{await bot.sendInput({input,frame,sequence});return send(res,200,{ok:true})}catch(e){return send(res,502,{error:msg(e)})}
  }
  if(url.pathname==="/api/chat"){
   if(!bot||!connected||!joined)return send(res,409,{error:"Join a room before sending chat."});
