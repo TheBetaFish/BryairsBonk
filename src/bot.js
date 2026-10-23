@@ -379,26 +379,42 @@ class BonkBot {
 			});
 
 			const result = response.data;
-			if (!result || typeof result !== 'object' || result.r !== 'success') {
-				const reason = result && (result.error || result.message || result.r);
-				throw new Error('Bonk.io could not resolve that room link' + (reason ? ': ' + String(reason) : '. The room may be closed or the link may have expired.'));
+			const autojoinSucceeded = result && typeof result === 'object' && result.r === 'success';
+
+			if (autojoinSucceeded) {
+				// Bonk.io's autojoin endpoint uses "passbypass"; setAddress()
+				// expects the normalized "bypass" property.
+				const normalized = {
+					...result,
+					address: result.address,
+					roomname: result.roomname || result.roomName || result.name,
+					server: result.server,
+					bypass: bypass || result.passbypass || result.bypass || '',
+				};
+
+				if (normalized.address && normalized.roomname && normalized.server) {
+					return normalized;
+				}
 			}
 
-			// Bonk.io's autojoin endpoint uses "passbypass"; setAddress()
-			// expects the normalized "bypass" property.
-			const normalized = {
-				...result,
-				address: result.address,
-				roomname: result.roomname || result.roomName || result.name,
-				server: result.server,
-				bypass: bypass || result.passbypass || result.bypass || '',
-			};
-
-			if (!normalized.address || !normalized.roomname || !normalized.server) {
-				throw new Error('Bonk.io returned an incomplete room lookup response (missing address, room name, or server).');
+			// The autojoin endpoint can return {r:"failed"} without a useful
+			// explanation. Fall back to the room-address endpoint for a valid
+			// six-digit share ID rather than failing immediately.
+			try {
+				const addressInfo = await this.getRoomAddress(id);
+				if (addressInfo && addressInfo.address && addressInfo.server) {
+					return {
+						...addressInfo,
+						roomname: addressInfo.roomname || addressInfo.roomName || 'Room ' + id,
+						bypass: bypass || addressInfo.passbypass || addressInfo.bypass || '',
+					};
+				}
+			} catch (fallbackError) {
+				logger.warn('Fallback room-address lookup failed', fallbackError.message);
 			}
 
-			return normalized;
+			const reason = result && (result.error || result.message || result.r);
+			throw new Error('Bonk.io could not resolve that room link' + (reason ? ': ' + String(reason) : '. The room may be closed or the link may have expired.'));
 		} catch (error) {
 			console.error('Error getting join link:', error);
 			throw error;
