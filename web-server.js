@@ -6,7 +6,7 @@ const HOST=process.env.HOST||"127.0.0.1",PORT=Number(process.env.PORT||8787);
 const ALLOWED_ORIGINS=new Set((process.env.ALLOWED_ORIGINS||"https://thebetafish.github.io,http://127.0.0.1:8787,http://localhost:8787").split(",").map(x=>x.trim()).filter(Boolean));
 let bot=null,connecting=false,connected=false,joined=false,currentRoom="",lastError="";
 const clients=new Set(),history=[];const MAX_HISTORY=250;
-function safePlayer(p){if(!p||typeof p!=="object")return null;return{id:p.id??p.peerID??null,username:String(p.username||p.name||"Player").slice(0,64),team:p.team??null,ready:p.ready??null};}
+function safePlayer(p){if(!p||typeof p!=="object")return null;return{id:p.id??p.peerID??null,username:String(p.username||p.userName||p.name||"Player").slice(0,64),team:p.team??null,teamName:p.teamName??null,guest:Boolean(p.guest),host:Boolean(p.host),ready:p.ready??null,level:Number.isFinite(Number(p.level))?Number(p.level):null,ping:Number.isFinite(Number(p.ping))?Number(p.ping):null};}
 function getPlayers(){try{return bot?bot.getAllPlayers().map(safePlayer).filter(Boolean):[]}catch{return[]}}
 function state(){return{backend:true,connecting,connected,joined,room:currentRoom,players:getPlayers(),lastError}}
 function broadcast(type,data={}){const item={type,data,time:new Date().toISOString()};history.push(item);if(history.length>MAX_HISTORY)history.shift();const line="data: "+JSON.stringify(item)+"\n\n";for(const res of clients){try{res.write(line)}catch{clients.delete(res)}}}
