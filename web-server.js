@@ -5,7 +5,7 @@ const {createBot,LOG_LEVELS}=require("./src");
 const HOST=process.env.HOST||"127.0.0.1",PORT=Number(process.env.PORT||8787);
 const ALLOWED_ORIGINS=new Set((process.env.ALLOWED_ORIGINS||"https://thebetafish.github.io,http://127.0.0.1:8787,http://localhost:8787").split(",").map(x=>x.trim()).filter(Boolean));
 let bot=null,connecting=false,connected=false,joined=false,currentRoom="",lastError="";
-let inputForwardPending=0,lastInputForwardDurationMs=null;
+let inputForwardPending=0,lastInputForwardDurationMs=null,lastOwnInputEcho=null;
 const clients=new Set(),history=[];const MAX_HISTORY=250;
 function safePlayer(p){if(!p||typeof p!=="object")return null;return{id:p.id??p.peerID??null,username:String(p.username||p.userName||p.name||"Player").slice(0,64),team:p.team??null,teamName:p.teamName??null,guest:Boolean(p.guest),host:Boolean(p.host),ready:p.ready??null,level:Number.isFinite(Number(p.level))?Number(p.level):null,ping:Number.isFinite(Number(p.ping))?Number(p.ping):null};}
 function getPlayers(){try{return bot?bot.getAllPlayers().map(safePlayer).filter(Boolean):[]}catch{return[]}}
@@ -20,6 +20,7 @@ function attachEvents(instance){
    broadcast("game-event",{name,detail});broadcast("state",state());
   });
  }
+ instance.events.on("PLAYER_INPUT",data=>{try{const player=data&&data.player;if(player&&instance.game&&Number(player.id)===Number(instance.game.id)){lastOwnInputEcho={input:Number(data.movement?.input),frame:Number(data.movement?.frame),sequence:Number(data.movement?.sequence),at:Date.now()};}}catch{}});
  instance.events.on("PACKET",packet=>{try{instance.autoHandlePacket(packet)}catch(e){broadcast("log",{level:"warn",message:"Packet handler: "+e.message})}});
 }
 function readBody(req){return new Promise((resolve,reject)=>{let raw="";req.on("data",c=>{raw+=c;if(raw.length>32000){reject(Error("Request body too large"));req.destroy()}});req.on("end",()=>{try{resolve(raw?JSON.parse(raw):{})}catch{reject(Error("Invalid JSON body"))}});req.on("error",reject)})}
@@ -62,7 +63,7 @@ async function api(req,res,url){
   const receivedAt=Date.now();try{const rawFrame=bot.room.framecount;const hasLiveFrame=typeof rawFrame==="number"&&Number.isFinite(rawFrame)&&rawFrame>0;const base=hasLiveFrame?rawFrame:null;const updatedAt=Number(bot.room.framecountUpdatedAt)||0;const frameAgeMs=updatedAt?Math.max(0,receivedAt-updatedAt):null;const inputFrame=frame;const frameSource="client-clock";
   // Observe the existing fire-and-forget send only: no await, queue, retry, or extra request.
   const forwardStarted=Date.now();inputForwardPending++;const forwardPromise=bot.sendInput({input,frame:inputFrame,sequence});Promise.resolve(forwardPromise).then(()=>{lastInputForwardDurationMs=Date.now()-forwardStarted;},e=>{lastInputForwardDurationMs=Date.now()-forwardStarted;broadcast("log",{level:"error",message:"Input forward failed: "+msg(e)});}).finally(()=>{inputForwardPending=Math.max(0,inputForwardPending-1)});
-  const socketConnected=Boolean(bot.socket&&bot.socket.connected);const lastPacketAt=Number(bot.lastPacketAt)||0;return send(res,200,{ok:true,frame:inputFrame,serverFrame:base,frameAgeMs,frameSource,forwardedAt:receivedAt,forwardPending:inputForwardPending,lastForwardDurationMs:lastInputForwardDurationMs,socketConnected,msSinceBonkPacket:lastPacketAt?Math.max(0,receivedAt-lastPacketAt):null,timeSyncLastSync:Number(bot.timeSync?.last_sync)||null,timeSyncLatencyMs:Number.isFinite(Number(bot.timeSync?.latency))?Number(bot.timeSync.latency):null})}catch(e){return send(res,502,{error:msg(e)})}
+  const socketConnected=Boolean(bot.socket&&bot.socket.connected);const lastPacketAt=Number(bot.lastPacketAt)||0;return send(res,200,{ok:true,frame:inputFrame,serverFrame:base,frameAgeMs,frameSource,forwardedAt:receivedAt,forwardPending:inputForwardPending,lastForwardDurationMs:lastInputForwardDurationMs,socketConnected,msSinceBonkPacket:lastPacketAt?Math.max(0,receivedAt-lastPacketAt):null,timeSyncLastSync:Number(bot.timeSync?.last_sync)||null,timeSyncLatencyMs:Number.isFinite(Number(bot.timeSync?.latency))?Number(bot.timeSync.latency):null,inputEchoAgeMs:lastOwnInputEcho?Math.max(0,receivedAt-lastOwnInputEcho.at):null,inputEchoFrame:lastOwnInputEcho?.frame??null,inputEchoSequence:lastOwnInputEcho?.sequence??null,inputEchoMask:lastOwnInputEcho?.input??null})}catch(e){return send(res,502,{error:msg(e)})}
  }
  if(url.pathname==="/api/chat"){
   if(!bot||!connected||!joined)return send(res,409,{error:"Join a room before sending chat."});
