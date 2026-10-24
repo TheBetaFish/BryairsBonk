@@ -96,6 +96,9 @@ class BonkBot {
 			latency: 0,
 		};
 
+		// Read-only diagnostic timestamp for the latest Bonk.IO protocol packet.
+		this.lastPacketAt = 0;
+
 		// Room information
 		this.room = {
 			id: null,
@@ -1328,6 +1331,8 @@ class BonkBot {
 		// Register listeners for all message types we care about
 		Object.values(SERVER_MESSAGE_TYPES).forEach((eventId) => {
 			this.socket.on(eventId, (...args) => {
+				// Read-only diagnostic: timestamp receipt before packet parsing.
+				this.lastPacketAt = Date.now();
 				// Create a packet array with event ID as first element and args as the rest
 				const packet = [eventId, ...args];
 
