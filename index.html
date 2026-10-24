@@ -21,6 +21,11 @@
 <dt>Frame source</dt><dd id="dgSource">&mdash;</dd>
 <dt>serverFrame</dt><dd id="dgServer">&mdash;</dd>
 <dt>frameAgeMs</dt><dd id="dgAge">&mdash;</dd>
+<dt>Forward pending</dt><dd id="dgForwardPending">&mdash;</dd>
+<dt>Last forward duration</dt><dd id="dgForwardDuration">&mdash;</dd>
+<dt>Bonk socket</dt><dd id="dgSocket">&mdash;</dd>
+<dt>Since Bonk packet</dt><dd id="dgPacketAge">&mdash;</dd>
+<dt>Timesync latency</dt><dd id="dgTimeSync">&mdash;</dd>
 <dt>Held</dt><dd id="dgHeld">none</dd>
 </dl></aside>
 <header><div class="brand"><div class="logo">B</div><div><h1>BRYAIR'S BONK</h1><p>Browser room client · GitHub Pages</p></div></div><div class="status" id="pageStatus">Browser UI loaded</div></header>
@@ -58,7 +63,7 @@ $("joinBtn").addEventListener("click",async()=>{const room=$("room").value.trim(
    time. It is NOT in-game input latency (the API answers before the packet is forwarded to Bonk.io). */
 const inputDiag=(()=>{
 const WINDOW_MS=10000,KEY="bryairsbonk-diag-hidden",panel=$("inputDiag");
-const ui={rtt:$("dgRtt"),win:$("dgWin"),status:$("dgStatus"),counts:$("dgCounts"),pending:$("dgPending"),frame:$("dgFrame"),source:$("dgSource"),server:$("dgServer"),age:$("dgAge"),held:$("dgHeld")};
+const ui={rtt:$("dgRtt"),win:$("dgWin"),status:$("dgStatus"),counts:$("dgCounts"),pending:$("dgPending"),frame:$("dgFrame"),source:$("dgSource"),server:$("dgServer"),age:$("dgAge"),forwardPending:$("dgForwardPending"),forwardDuration:$("dgForwardDuration"),socket:$("dgSocket"),packetAge:$("dgPacketAge"),timeSync:$("dgTimeSync"),held:$("dgHeld")};
 const pending=new Map(),samples=[];let nextId=0,last=null,snap=null,lastSource=null,heldSince=0,hidden=false;
 try{hidden=localStorage.getItem(KEY)==="1"}catch{}
 panel.hidden=hidden;
@@ -69,7 +74,7 @@ const rttClass=v=>!Number.isFinite(v)?"":v<150?"ok":v<400?"warn":"bad";
 const trackHeld=now=>{if(heldInputs){if(!heldSince)heldSince=now}else heldSince=0};
 function settle(probe,ok,error){if(!probe||probe.settled)return false;probe.settled=true;pending.delete(probe.id);const t=performance.now(),dur=t-probe.t0;samples.push({t,ms:dur,ok});last={ok,ms:dur,error};return true}
 const begin=guard(sentFrame=>{const probe={id:nextId++,t0:performance.now(),sentFrame,settled:false};pending.set(probe.id,probe);return probe});
-const done=guard((probe,result)=>{if(!settle(probe,true,""))return;const r=result||{};snap={frame:r.frame,source:r.frameSource,serverFrame:r.serverFrame,ageMs:r.frameAgeMs,delta:Number.isFinite(r.frame)&&Number.isFinite(probe.sentFrame)?r.frame-probe.sentFrame:null};if(r.frameSource&&r.frameSource!==lastSource){log("Input frame source "+(lastSource?lastSource+" → ":"")+r.frameSource+" · "+((performance.now()-gameStartTime)/1000).toFixed(1)+" s into match · frameAgeMs "+r.frameAgeMs);lastSource=r.frameSource}if(!hidden)render()});
+const done=guard((probe,result)=>{if(!settle(probe,true,""))return;const r=result||{};snap={frame:r.frame,source:r.frameSource,serverFrame:r.serverFrame,ageMs:r.frameAgeMs,delta:Number.isFinite(r.frame)&&Number.isFinite(probe.sentFrame)?r.frame-probe.sentFrame:null,forwardPending:r.forwardPending,lastForwardDurationMs:r.lastForwardDurationMs,socketConnected:r.socketConnected,msSinceBonkPacket:r.msSinceBonkPacket,timeSyncLatencyMs:r.timeSyncLatencyMs};if(r.frameSource&&r.frameSource!==lastSource){log("Input frame source "+(lastSource?lastSource+" → ":"")+r.frameSource+" · "+((performance.now()-gameStartTime)/1000).toFixed(1)+" s into match · frameAgeMs "+r.frameAgeMs);lastSource=r.frameSource}if(!hidden)render()});
 const fail=guard((probe,err)=>{if(!settle(probe,false,String(err&&err.message||err||"error")))return;if(!hidden)render()});
 function render(){
  const now=performance.now();trackHeld(now);
@@ -86,6 +91,11 @@ function render(){
  put(ui.source,snap&&snap.source?snap.source:"—",fallback);
  put(ui.server,snap?num(snap.serverFrame):"—");
  put(ui.age,snap?fmtMs(snap.ageMs):"—",fallback);
+ put(ui.forwardPending,snap&&Number.isFinite(snap.forwardPending)?String(snap.forwardPending):"—",snap&&snap.forwardPending>1?"warn":"");
+ put(ui.forwardDuration,snap?fmtMs(snap.lastForwardDurationMs):"—");
+ put(ui.socket,snap&&typeof snap.socketConnected==="boolean"?(snap.socketConnected?"connected":"disconnected"):"—",snap&&snap.socketConnected?"ok":"bad");
+ put(ui.packetAge,snap?fmtMs(snap.msSinceBonkPacket):"—",snap&&snap.msSinceBonkPacket>5000?"warn":"");
+ put(ui.timeSync,snap?fmtMs(snap.timeSyncLatencyMs):"—");
  put(ui.held,heldInputs?((now-heldSince)/1000).toFixed(1)+" s · mask "+heldInputs:"none");
  panel.classList.toggle("idle",!n&&!pending.size&&!heldInputs);
 }
@@ -93,7 +103,7 @@ const setHidden=h=>{hidden=h;panel.hidden=h;try{localStorage.setItem(KEY,h?"1":"
 const copyButton=$("diagCopy");
 copyButton.addEventListener("click",async()=>{
  const lines=["INPUT DIAGNOSTICS","HTTP request RTT - not in-game latency"];
- const labels=[["Last RTT","rtt"],["10 s avg / max","win"],["Last status","status"],["10 s ok / fail","counts"],["Pending","pending"],["Frame / Δclient","frame"],["Frame source","source"],["serverFrame","server"],["frameAgeMs","age"],["Held","held"]];
+ const labels=[["Last RTT","rtt"],["10 s avg / max","win"],["Last status","status"],["10 s ok / fail","counts"],["Pending","pending"],["Frame / Δclient","frame"],["Frame source","source"],["serverFrame","server"],["frameAgeMs","age"],["Forward pending","forwardPending"],["Last forward duration","forwardDuration"],["Bonk socket","socket"],["Since Bonk packet","packetAge"],["Timesync latency","timeSync"],["Held","held"]];
  for(const [label,key] of labels)lines.push(label+": "+(ui[key].textContent||"—"));
  const report=lines.join("\n");
  try{await navigator.clipboard.writeText(report);copyButton.textContent="Copied!";}catch{
