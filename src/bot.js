@@ -969,11 +969,16 @@ class BonkBot {
 				break;
 
 			case 'STATE':
-				// Keep the authoritative room frame in sync so remote inputs are not
-				// stamped with a browser-local frame counter that the game server may reject.
-				if (Number.isFinite(Number(packet.framecount))) {
-					this.room.framecount = Number(packet.framecount);
-					this.room.framecountUpdatedAt = Date.now();
+				// Bonk packets may expose the authoritative frame as `fc` (the same
+				// field used by INITIAL_DATA/GAME_START) or `framecount`. Accept both
+				// so the input endpoint doesn't fall back to its round-start clock forever.
+				{
+					const rawFrame = packet.framecount ?? packet.fc ?? packet.state?.fc;
+					const frame = Number(rawFrame);
+					if (rawFrame !== undefined && rawFrame !== null && Number.isFinite(frame) && frame >= 0) {
+						this.room.framecount = frame;
+						this.room.framecountUpdatedAt = Date.now();
+					}
 				}
 				if (packet.stateID !== undefined) this.room.stateID = packet.stateID;
 				if (packet.state !== undefined) this.room.state = packet.state;
